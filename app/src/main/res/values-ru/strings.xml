@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WorkingWithMultimedia</string>
+    <string name="album">АЛЬБОМ</string>
+    <string name="executor">Исполнитель:</string>
+    <string name="alternative">- альтернатива</string>
+    <string name="chooser_share_song">Поделиться песней</string>
+</resources>

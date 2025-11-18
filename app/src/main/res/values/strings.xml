@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">WorkingWithMultimedia</string>
+    <string name="album">ALBUM</string>
+    <string name="one_more_light_live" translatable="false">One More Light Live</string>
+    <string name="executor">Executor:</string>
+    <string name="linkin_park" translatable="false">Linkin Park</string>
+    <string name="_2017" translatable="false">2017</string>
+    <string name="alternative">- alternative</string>
+    <string name="play" translatable="false">Play</string>
+    <string name="share" translatable="false">Share</string>
+    <string name="like" translatable="false">Like</string>
+    <string name="chooser_share_song">Share song</string>
+</resources>

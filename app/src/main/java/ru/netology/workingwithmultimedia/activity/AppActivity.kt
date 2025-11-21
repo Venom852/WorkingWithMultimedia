@@ -24,31 +24,16 @@ import com.google.gson.Gson
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import android.media.session.MediaController
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import ru.netology.workingwithmultimedia.dao.SongDao
-import ru.netology.workingwithmultimedia.entity.SongEntity
-import ru.netology.workingwithmultimedia.entity.toDto
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class AppActivity : AppCompatActivity(R.layout.activity_main) {
-    @Inject
-    lateinit var dao: SongDao
     private val mediaObserver = MediaLifecycleObserver()
     private val gson = Gson()
-    private var listSong = emptyList<Song>()
-    private var isPaused = false
-    private var song = Song(
-        id = 0,
-        title = "",
-        time = 0.0,
-        play = false,
-        liked = false,
-        share = false,
-        beingPlayed = false,
-        file = null
-    )
+
+    companion object {
+        var isPaused = false
+        var checked = false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,7 +63,7 @@ class AppActivity : AppCompatActivity(R.layout.activity_main) {
             override fun onPlay(song: Song) {
 //                mediaController = MediaController(this@AppActivity, mediaController.sessionToken)
                 viewModel.play(song.id)
-                viewModel.playSong(song.id)
+//                viewModel.playSong(song.id)
             }
         })
 
@@ -101,45 +86,20 @@ class AppActivity : AppCompatActivity(R.layout.activity_main) {
                         isPaused = true
                     }
                     binding.play.isChecked = !isChecked
-                }
-
-                if (dao.isEmpty()) {
-                    viewModel.saveSongs()
+                    checked = !isChecked
                 }
 
 //                mediaController = MediaController(this@AppActivity, mediaController.sessionToken)
-                CoroutineScope(Dispatchers.Default).launch {
-                    listSong = dao.getSongs().toDto()
 
-                    while (true) {
-                        if (binding.play.isChecked && isPaused) {
-                            isPaused = false
-                            listSong.forEach {
-                                if (it.beingPlayed) {
-                                    viewModel.play(it.id)
-                                    viewModel.playSong(it.id)
-                                } else {
-                                    song = it.copy(beingPlayed = true)
-                                    dao.saveSong(SongEntity.fromDto(song))
-                                    viewModel.play(song.id)
-                                    viewModel.playSong(song.id)
-                                }
-                            }
-                        }
-
-                        if (binding.play.isChecked && !isPaused) {
-                            listSong.forEach {
-                                song = it.copy(beingPlayed = true)
-                                dao.saveSong(SongEntity.fromDto(song))
-                                viewModel.play(song.id)
-                                viewModel.playSong(song.id)
-                            }
-                        }
-                    }
+                if (viewModel.isEmpty()) {
+                    viewModel.saveSongs()
+                } else {
+                    viewModel.playSong()
                 }
             }
         }
     }
+
     private fun applyInset(main: View) {
         ViewCompat.setOnApplyWindowInsetsListener(main) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())

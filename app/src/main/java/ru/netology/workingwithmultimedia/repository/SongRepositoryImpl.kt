@@ -1,12 +1,12 @@
 package ru.netology.workingwithmultimedia.repository
 
-import com.google.gson.Gson
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-//import okhttp3.logging.HttpLoggingInterceptor
+import okhttp3.logging.HttpLoggingInterceptor
 import ru.netology.workingwithmultimedia.dto.Tracks
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -15,15 +15,12 @@ import javax.inject.Singleton
 
 @Singleton
 class SongRepositoryImpl @Inject constructor() : SongRepository {
-    private val gson = Gson()
-    private val listFiles = mutableListOf<File>()
-
-    //    private val logging = HttpLoggingInterceptor().apply {
-//        level = HttpLoggingInterceptor.Level.BODY
-//    }
+    private val logging = HttpLoggingInterceptor().apply {
+        level = HttpLoggingInterceptor.Level.BODY
+    }
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-//        .addInterceptor(logging)
+        .addInterceptor(logging)
         .build()
 
     companion object {
@@ -31,9 +28,9 @@ class SongRepositoryImpl @Inject constructor() : SongRepository {
             "https://raw.githubusercontent.com/netology-code/andad-homeworks/master/09_multimedia/data"
     }
 
-    override suspend fun saveSong(track: List<Tracks>): List<File> {
-        CoroutineScope(Dispatchers.Default).launch {
-            track.forEach {
+    override suspend fun saveSong(track: List<Tracks>): List<File> = withContext(Dispatchers.IO) {
+        track.map {
+            async {
                 val file = it.file
                 val request: Request = Request.Builder()
                     .url("${BASE_URL}/${file}")
@@ -43,9 +40,9 @@ class SongRepositoryImpl @Inject constructor() : SongRepository {
                 val fileSong = File.createTempFile("files", "index")
                 fileSong.writeBytes(body)
 
-                listFiles.add(fileSong)
+                fileSong
             }
         }
-        return listFiles
+            .awaitAll()
     }
 }

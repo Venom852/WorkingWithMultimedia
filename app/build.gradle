@@ -20,6 +20,10 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    packagingOptions {
+        exclude 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+    }
+
     buildFeatures {
         viewBinding true
     }
@@ -49,7 +53,7 @@ dependencies {
     implementation libs.androidx.activity
     implementation libs.androidx.constraintlayout
     implementation libs.okhttp
-//    implementation libs.logging.interceptor
+    implementation libs.logging.interceptor
 
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit

@@ -1,5 +1,7 @@
 package ru.netology.workingwithmultimedia.dto
 
+import ru.netology.workingwithmultimedia.repository.SongRepositoryImpl
+
 data class Album(
     val id: Long,
     val title: String,
@@ -13,4 +15,7 @@ data class Album(
 data class Tracks(
     val id: Long,
     val file: String
-)
+) {
+    val url: String
+        get() = "${SongRepositoryImpl.BASE_URL}/$file"
+}

@@ -1,8 +1,13 @@
 package ru.netology.workingwithmultimedia.repository
 
-import ru.netology.workingwithmultimedia.dto.Tracks
-import java.io.File
+import kotlinx.coroutines.flow.Flow
+import ru.netology.workingwithmultimedia.dto.Song
+import ru.netology.workingwithmultimedia.dto.SongId
 
+// Вся логика по скачиванию и хранению треков здесь
 interface SongRepository {
-    suspend fun saveSong(track: List<Tracks>): List<File>
+    val data: Flow<List<Song>>
+    suspend fun loadSongs()
+    suspend fun like(id: SongId)
+    suspend fun share(id: SongId)
 }

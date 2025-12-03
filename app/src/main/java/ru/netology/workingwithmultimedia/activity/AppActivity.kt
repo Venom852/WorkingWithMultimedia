@@ -4,37 +4,25 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import dagger.hilt.android.AndroidEntryPoint
-import ru.netology.workingwithmultimedia.lifecycle.MediaLifecycleObserver
-import ru.netology.workingwithmultimedia.R
-import ru.netology.workingwithmultimedia.adapter.SongAdapter
-import ru.netology.workingwithmultimedia.databinding.ActivityMainBinding
-import ru.netology.workingwithmultimedia.adapter.OnInteractionListener
-import ru.netology.workingwithmultimedia.dto.Song
-import kotlin.getValue
-import ru.netology.workingwithmultimedia.viewModel.SongViewModel
-import androidx.activity.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.gson.Gson
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import android.media.session.MediaController
+import ru.netology.workingwithmultimedia.R
+import ru.netology.workingwithmultimedia.adapter.OnInteractionListener
+import ru.netology.workingwithmultimedia.adapter.SongAdapter
+import ru.netology.workingwithmultimedia.databinding.ActivityMainBinding
+import ru.netology.workingwithmultimedia.dto.Song
+import ru.netology.workingwithmultimedia.viewModel.SongViewModel
 
 @AndroidEntryPoint
-class AppActivity : AppCompatActivity(R.layout.activity_main) {
-    private val mediaObserver = MediaLifecycleObserver()
-    private val gson = Gson()
-
-    companion object {
-        var isPaused = false
-        var checked = false
-    }
-
+class AppActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val binding = ActivityMainBinding.inflate(layoutInflater)
@@ -53,7 +41,7 @@ class AppActivity : AppCompatActivity(R.layout.activity_main) {
                 val intent = Intent().apply {
                     action = Intent.ACTION_SEND
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, gson.toJson(song))
+                    putExtra(Intent.EXTRA_TEXT, song.url) // Делиться объектом в формате json наверное не очень интересно. Лучше ссылкой
                 }
                 val chooser = Intent.createChooser(intent, getString(R.string.chooser_share_song))
                 startActivity(chooser)
@@ -61,42 +49,24 @@ class AppActivity : AppCompatActivity(R.layout.activity_main) {
             }
 
             override fun onPlay(song: Song) {
-//                mediaController = MediaController(this@AppActivity, mediaController.sessionToken)
                 viewModel.play(song.id)
-//                viewModel.playSong(song.id)
             }
         })
 
         binding.main.adapter = adapter
-        lifecycle.addObserver(mediaObserver)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.data.collectLatest {
-                    adapter.submitList(it)
+                viewModel.data.collectLatest { songs ->
+                    adapter.submitList(songs)
+                    binding.play.isChecked = songs.any { it.play }
                 }
             }
         }
 
         binding.play.setOnClickListener {
-            lifecycleScope.launch {
-                binding.play.addOnCheckedChangeListener { _, isChecked ->
-                    if (isChecked && !isPaused) {
-                        viewModel.pauseSong()
-                        isPaused = true
-                    }
-                    binding.play.isChecked = !isChecked
-                    checked = !isChecked
-                }
-
-//                mediaController = MediaController(this@AppActivity, mediaController.sessionToken)
-
-                if (viewModel.isEmpty()) {
-                    viewModel.saveSongs()
-                } else {
-                    viewModel.playSong()
-                }
-            }
+            viewModel.playBig()
+            binding.play.isChecked = !binding.play.isChecked
         }
     }
 

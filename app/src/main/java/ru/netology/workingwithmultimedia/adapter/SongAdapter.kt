@@ -16,9 +16,27 @@ class SongAdapter (
         return SongViewHolder(binding, onInteractionListener)
     }
 
-    override fun onBindViewHolder(holder: SongViewHolder, position: Int) {
-        getItem(position)?.let {
-            holder.bind(it)
+    // Либо полное, либо частичное обновление
+    override fun onBindViewHolder(
+        holder: SongViewHolder,
+        position: Int,
+        payloads: List<Any?>,
+    ) {
+        if (payloads.isEmpty()) {
+            onBindViewHolder(holder, position)
+        } else {
+            payloads.forEach {
+                if (it is SongDiffCallback.Payload) {
+                    holder.bind(it)
+                }
+            }
         }
+    }
+
+    override fun onBindViewHolder(
+        holder: SongViewHolder,
+        position: Int
+    ) {
+        holder.bind(getItem(position))
     }
 }

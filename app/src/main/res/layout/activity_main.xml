@@ -85,6 +85,7 @@
         app:layout_constraintTop_toBottomOf="@id/executorTextTitle"
         app:layout_constraintStart_toEndOf="@id/yearText" />
 
+    <!-- Здесь поменял иконку на selector, чтобы состояния менялись -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/play"
         android:layout_width="wrap_content"
@@ -93,7 +94,7 @@
         android:layout_marginTop="20dp"
         android:contentDescription="@string/play"
         android:checkable="true"
-        app:icon="@drawable/ic_play_48"
+        app:icon="@drawable/ic_play_selector"
         app:backgroundTint="#ffd54f"
         app:iconSize="40dp"
         app:iconTint="#000000"
@@ -109,10 +110,12 @@
         app:barrierMargin="15dp"
         app:constraint_referenced_ids="play" />
 
+    <!-- Здесь высота была wrap_content и не было привязки низа. Из-за этого часть треков не было видно в списке -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/main"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@id/barrier"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         tools:listitem="@layout/vision_song" />

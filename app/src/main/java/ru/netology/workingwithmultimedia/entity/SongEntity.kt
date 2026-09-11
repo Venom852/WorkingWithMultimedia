@@ -3,45 +3,38 @@ package ru.netology.workingwithmultimedia.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import ru.netology.workingwithmultimedia.dto.Song
-import java.io.File
 import kotlin.collections.map
 
+// Здесь нет смысла хранить признак play: Boolean т.к. он связан напрямую с плеером, а плеер хранится в оперативной памяти
 @Entity
 data class SongEntity(
-    @PrimaryKey(autoGenerate = true)
+    @PrimaryKey
     val id: Long,
     val title: String,
-    val time: Double,
-    val play: Boolean,
+    val timeMillis: Long,
     val liked: Boolean,
     val share: Boolean,
-    val beingPlayed: Boolean,
-    val file: File?
+    val url: String, // Убрал хранение файлов, чтобы не усложнять. Плеер умеет сразу по url играть музыку
 ) {
     fun toDto() = Song(
-        id,
-        title,
-        time,
-        play,
-        liked,
-        share,
-        beingPlayed,
-        file
+        id = id,
+        title = title,
+        timeMillis = timeMillis,
+        liked = liked,
+        share = share,
+        url = url,
     )
 
     companion object {
         fun fromDto(song: Song) = SongEntity(
-            song.id,
-            song.title,
-            song.time,
-            song.play,
-            song.liked,
-            song.share,
-            song.beingPlayed,
-            song.file
+            id = song.id,
+            title = song.title,
+            timeMillis = song.timeMillis,
+            liked = song.liked,
+            share = song.share,
+            url = song.url,
         )
     }
 }
 
 fun List<SongEntity>.toDto(): List<Song> = map(SongEntity::toDto)
-fun List<Song>.toEntity(): List<SongEntity> = map(SongEntity::fromDto)

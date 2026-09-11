@@ -1,208 +1,142 @@
 package ru.netology.workingwithmultimedia.viewModel
 
 import android.app.Application
-import android.media.MediaMetadataRetriever
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.scan
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import ru.netology.workingwithmultimedia.dao.SongDao
-import ru.netology.workingwithmultimedia.dto.Album
 import ru.netology.workingwithmultimedia.dto.Song
-import ru.netology.workingwithmultimedia.entity.SongEntity
-import ru.netology.workingwithmultimedia.entity.toDto
-import ru.netology.workingwithmultimedia.lifecycle.MediaLifecycleObserver
+import ru.netology.workingwithmultimedia.dto.SongId
 import ru.netology.workingwithmultimedia.repository.SongRepository
+import ru.netology.workingwithmultimedia.util.MediaService
 import javax.inject.Inject
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
-import ru.netology.workingwithmultimedia.activity.AppActivity.Companion.isPaused
-import ru.netology.workingwithmultimedia.activity.AppActivity.Companion.checked
 
 @HiltViewModel
 class SongViewModel @Inject constructor(
-    private val dao: SongDao,
     private val repository: SongRepository,
+    private val mediaService: MediaService,
     application: Application
 ) : AndroidViewModel(application) {
-    private var song = Song(
-        id = 0,
-        title = "",
-        time = 0.0,
-        play = false,
-        liked = false,
-        share = false,
-        beingPlayed = false,
-        file = null
-    )
-    private val gson = Gson()
-    private val mediaObserver = MediaLifecycleObserver()
-    val data: Flow<List<Song>> = dao.getAll().map { it.toDto() }
-    private val albumData = application.assets.open("albumData.json")
-        .bufferedReader()
-        .use {
-            it.readText()
-        }
-    private val tracks = gson.fromJson(albumData, Album::class.java).tracks
+    // Текущая композиция, которая сейчас играет. Храним в оперативной памяти здесь
+    private val playingSongId = MutableStateFlow<SongId?>(null)
 
-    fun play(id: Long) {
-        viewModelScope.launch {
-            dao.play(id)
+    // Позиции всех треков по url. Храним тоже в оперативной памяти
+    private val positions =
+        // Через scan составляем словарь из позиций всех треков на основе текущей currentPosition
+        mediaService.currentPosition.scan(mapOf<String, Long>()) { accumulator, newPosition ->
+            accumulator + (newPosition.url to newPosition.positionMillis)
         }
+            // Чтобы можно было текущее значение прочитать, делаем StateFlow
+            .stateIn(viewModelScope, SharingStarted.Lazily, mapOf())
+
+    // Создаём подписку на список песен из 3 источников
+    val data: Flow<List<Song>> = combine(
+        repository.data, // Данные из БД
+        playingSongId, // Текущий трек
+        positions, // Позиции треков по url
+    ) { allSongs, playingSongId, positions ->
+        allSongs.map { song ->
+            song.copy(
+                play = song.id == playingSongId,
+                currentPositionMillis = positions[song.url] ?: 0L
+            )
+        }
+    }
+
+    init {
+        loadSongs()
+        initPlayer()
+    }
+
+    // Переключает трек на другой или ставит на паузу, если вызвать повторно с тем же id
+    fun play(id: Long) {
+        val value = playingSongId.value
+        val isPlaying = value == id
+
+        if (isPlaying) {
+            playingSongId.value = null
+        } else {
+            playingSongId.value = id
+        }
+    }
+
+    // Нажатие на большую кнопку. Здесь логика простая максимально.
+    // Если что-то играет, останавливаем музыку, а если не играет, то начинаем с первой
+    fun playBig() {
+        viewModelScope.launch {
+            if (playingSongId.value == null) {
+                playFirstSong()
+            } else {
+                playingSongId.value = null
+            }
+        }
+    }
+
+    private suspend fun playFirstSong() {
+        data.first().firstOrNull()?.id?.let(::play)
     }
 
     fun like(id: Long) {
         viewModelScope.launch {
-            dao.like(id)
+            repository.like(id)
         }
     }
 
     fun share(id: Long) {
         viewModelScope.launch {
-            dao.share(id)
+            repository.share(id)
         }
     }
 
-    fun saveSongs() {
+    fun loadSongs() { // В идеале следует добавить обработку ошибок
         viewModelScope.launch {
-            val listFiles = repository.saveSong(tracks)
+            repository.loadSongs()
 
-            val job = launch {
-                listFiles.forEach {
-                    launch {
-                        val retriever = MediaMetadataRetriever()
-                        retriever.setDataSource(it.absolutePath)
-                        val durationStr =
-                            retriever.extractMetadata(
-                                MediaMetadataRetriever.METADATA_KEY_DURATION
-                            )
-                        val duration = durationStr?.toIntOrNull() ?: 0
-                        val title = retriever.extractMetadata(
-                            MediaMetadataRetriever.METADATA_KEY_TITLE
-                        ) ?: "noName"
-                        retriever.release()
+            playFirstSong()
 
-                        song = song.copy(
-                            title = title,
-                            time = duration.toDuration(DurationUnit.MILLISECONDS)
-                                .toDouble(DurationUnit.MINUTES),
-                            file = it
-                        )
-                        dao.saveSong(SongEntity.fromDto(song))
-                    }
-                }
-            }
-
-            job.join()
-            playSong()
+            mediaService.setOnCompleteListener { playNext() }
         }
     }
 
-    fun playSong() {
+    private fun initPlayer() {
+        // Наблюдаем за выбранным треком по id
+        playingSongId.onEach { playingSongId ->
+            if (playingSongId == null) {
+                mediaService.stop()
+            } else {
+                // Нужны данные для перемотки, если трек уже проигрывался
+                val toPlay = data.first().first { it.id == playingSongId }
+                mediaService.play(
+                    url = toPlay.url,
+                    positionMillis = toPlay.currentPositionMillis,
+                )
+            }
+        }
+            .flowOn(Dispatchers.Default)
+            .launchIn(viewModelScope)
+
+        addCloseable(mediaService) // Чтобы не тратить ресурсы при закрытии экрана
+    }
+
+    // Берём следующую песню и отправляем её в плеер
+    // Если трек был последний, берём первый
+    private fun playNext() {
         viewModelScope.launch {
-            var listSong = emptyList<Song>()
-            val job = CoroutineScope(Dispatchers.IO).launch {
-                listSong = dao.getSongs().toDto()
-            }
-            job.join()
-            if (checked && isPaused) {
-                isPaused = false
-                listSong.forEach {
-                    if (it.beingPlayed) {
-                        play(it.id)
-
-                        mediaObserver.apply {
-                            mediaPlayer?.setDataSource(
-                                it.file?.absolutePath
-                            )
-                        }.play()
-
-                        song = it.copy(beingPlayed = false)
-                        dao.saveSong(SongEntity.fromDto(song))
-                    } else {
-                        song = it.copy(beingPlayed = true)
-
-                        saveSong(song)
-                        play(song.id)
-
-                        mediaObserver.apply {
-                            mediaPlayer?.setDataSource(
-                                it.file?.absolutePath
-                            )
-                        }.play()
-
-                        song = it.copy(beingPlayed = false)
-                        dao.saveSong(SongEntity.fromDto(song))
-                    }
-                }
-            }
-
-            if (checked && !isPaused) {
-                listSong.forEach {
-                    song = it.copy(beingPlayed = true)
-
-                    saveSong(song)
-                    play(song.id)
-
-                    mediaObserver.apply {
-                        mediaPlayer?.setDataSource(
-                            it.file?.absolutePath
-                        )
-                    }.play()
-
-                    song = it.copy(beingPlayed = false)
-                    dao.saveSong(SongEntity.fromDto(song))
-                }
-            }
-        }
-    }
-
-    fun pauseSong() {
-        viewModelScope.launch {
-            mediaObserver.pause()
-        }
-    }
-
-    suspend fun isEmpty(): Boolean {
-        var isEmpty = false
-        val job = viewModelScope.launch {
-            isEmpty = dao.isEmpty()
-        }
-
-        job.join()
-        return isEmpty
-    }
-
-    suspend fun getSongs(): List<Song> {
-        var listSongs = emptyList<Song>()
-        val job = viewModelScope.launch {
-            CoroutineScope(Dispatchers.IO).launch {
-                listSongs = dao.getSongs().toDto()
-            }
-        }
-
-        job.join()
-        return listSongs
-    }
-
-//    suspend fun getSongs(): List<Song> = withContext(Dispatchers.IO) {
-//        var listSongs: List<Song>
-//            async {
-//                listSongs = dao.getSongs().toDto()
-//                listSongs
-//            }
-//                .await()
-//
-//    }
-
-    fun saveSong(song: Song) {
-        viewModelScope.launch {
-                dao.saveSong(SongEntity.fromDto(song))
+            val currentSongId = playingSongId.value
+            val songs = data.first()
+            val nextIndex = songs.indexOfFirst { song -> song.id == currentSongId } + 1
+            play(songs.getOrElse(nextIndex) { songs.first() }.id)
         }
     }
 }

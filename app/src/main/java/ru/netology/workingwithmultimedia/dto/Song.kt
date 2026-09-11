@@ -1,44 +1,26 @@
 package ru.netology.workingwithmultimedia.dto
 
-import java.io.File
+typealias SongId = Long
 
-data class Song (
-    val id: Long,
+data class Song(
+    val id: SongId = 0,
     val title: String,
-    val time: Double,
-    val play: Boolean,
-    val liked: Boolean,
-    val share: Boolean,
-    val beingPlayed: Boolean,
-    val file: File?
+    val timeMillis: Long,
+    val currentPositionMillis: Long = 0,
+    val liked: Boolean = false,
+    val share: Boolean = false,
+    val play: Boolean = false,
+    val url: String,
 ) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
+    val currentPositionFormatted = formatMillisToMmSs(
+        currentPositionMillis,
+    )
 
-        other as Song
+    private fun formatMillisToMmSs(millis: Long): String {
+        if (millis < 0) return "00:00"
 
-        if (id != other.id) return false
-        if (time != other.time) return false
-        if (play != other.play) return false
-        if (liked != other.liked) return false
-        if (share != other.share) return false
-        if (beingPlayed != other.beingPlayed) return false
-        if (title != other.title) return false
-        if (file != other.file) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = id.hashCode()
-        result = 31 * result + time.hashCode()
-        result = 31 * result + play.hashCode()
-        result = 31 * result + liked.hashCode()
-        result = 31 * result + share.hashCode()
-        result = 31 * result + beingPlayed.hashCode()
-        result = 31 * result + title.hashCode()
-        result = 31 * result + (file?.hashCode() ?: 0)
-        return result
+        val seconds = (millis / 1000) % 60
+        val minutes = (millis / 1000) / 60
+        return String.format("%02d:%02d", minutes, seconds)
     }
 }
